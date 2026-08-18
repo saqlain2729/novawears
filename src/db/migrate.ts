@@ -1,6 +1,7 @@
-import { sqlite } from "./index";
+import { client } from "./index";
 
-sqlite.exec(`
+async function main() {
+  await client.executeMultiple(`
 CREATE TABLE IF NOT EXISTS admins (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
@@ -102,4 +103,10 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `);
 
-console.log("✅ Database schema migrated.");
+  console.log("✅ Database schema migrated.");
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

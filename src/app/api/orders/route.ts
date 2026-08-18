@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, sqlite } from "@/db";
-import { products } from "@/db/schema";
+import { db } from "@/db";
+import { products, customers, orders, orderItems } from "@/db/schema";
 import { checkoutSchema } from "@/lib/validation";
 import { generateOrderNumber } from "@/lib/order-number";
 import { getSettings } from "@/lib/settings";
 import { sendAdminOrderNotification, sendCustomerOrderConfirmation } from "@/lib/email";
 import { randomUUID } from "crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -74,58 +74,52 @@ export async function POST(req: NextRequest) {
 
   // Atomic transaction: create customer, order, order items, and decrement
   // stock together — if anything fails, nothing is committed.
-  const tx = sqlite.transaction(() => {
-    sqlite
-      .prepare(`INSERT INTO customers (id, name, phone, email) VALUES (?, ?, ?, ?)`)
-      .run(customerId, input.fullName, input.phone, input.email || null);
+  try {
+    await db.transaction(async (tx) => {
+      await tx.insert(customers).values({
+        id: customerId,
+        name: input.fullName,
+        phone: input.phone,
+        email: input.email || null,
+      });
 
-    sqlite
-      .prepare(
-        `INSERT INTO orders (id, order_number, customer_id, customer_name, phone, email, address, city, province, postal_code, notes, payment_method, subtotal, shipping_fee, total, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'cod', ?, ?, ?, 'pending')`
-      )
-      .run(
-        orderId,
+      await tx.insert(orders).values({
+        id: orderId,
         orderNumber,
         customerId,
-        input.fullName,
-        input.phone,
-        input.email || null,
-        input.address,
-        input.city,
-        input.province,
-        input.postalCode || null,
-        input.notes || null,
+        customerName: input.fullName,
+        phone: input.phone,
+        email: input.email || null,
+        address: input.address,
+        city: input.city,
+        province: input.province,
+        postalCode: input.postalCode || null,
+        notes: input.notes || null,
+        paymentMethod: "cod",
         subtotal,
         shippingFee,
-        total
-      );
+        total,
+        status: "pending",
+      });
 
-    for (const item of resolvedItems) {
-      sqlite
-        .prepare(
-          `INSERT INTO order_items (id, order_id, product_id, product_name, color, unit_price, quantity, line_total)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-          randomUUID(),
+      for (const item of resolvedItems) {
+        await tx.insert(orderItems).values({
+          id: randomUUID(),
           orderId,
-          item.productId,
-          item.productName,
-          item.color || null,
-          item.unitPrice,
-          item.quantity,
-          item.lineTotal
-        );
+          productId: item.productId,
+          productName: item.productName,
+          color: item.color || null,
+          unitPrice: item.unitPrice,
+          quantity: item.quantity,
+          lineTotal: item.lineTotal,
+        });
 
-      sqlite
-        .prepare(`UPDATE products SET stock = stock - ? WHERE id = ?`)
-        .run(item.quantity, item.productId);
-    }
-  });
-
-  try {
-    tx();
+        await tx
+          .update(products)
+          .set({ stock: sql`${products.stock} - ${item.quantity}` })
+          .where(eq(products.id, item.productId));
+      }
+    });
   } catch (err) {
     console.error("[orders] transaction failed", err);
     return NextResponse.json({ error: "Could not place order. Please try again." }, { status: 500 });

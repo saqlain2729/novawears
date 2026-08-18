@@ -361,6 +361,9 @@ export default function ProductForm({ product }: { product?: Product }) {
                 key={`${url}-${index}`}
                 className="relative border border-line-light bg-white"
               >
+                {/* eslint-disable-next-line @next/next/no-img-element -- admin-only preview of
+                    an arbitrary/unsaved URL (local upload, Blob, or pasted link); Next/Image's
+                    optimizer requires a fixed remote allowlist, which doesn't fit here. */}
                 <img
                   src={url}
                   alt={`Product image ${index + 1}`}

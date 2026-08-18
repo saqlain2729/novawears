@@ -1,5 +1,6 @@
-import { db, sqlite } from "./index";
+import { db } from "./index";
 import { categories, products, settings, admins } from "./schema";
+import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -9,7 +10,7 @@ function id() {
 
 async function main() {
   // ---------- Settings (single row, insert if missing) ----------
-  const existingSettings = sqlite.prepare("SELECT id FROM settings WHERE id = 'main'").get();
+  const existingSettings = (await db.select({ id: settings.id }).from(settings).where(eq(settings.id, "main")))[0];
   if (!existingSettings) {
     await db.insert(settings).values({ id: "main" });
     console.log("✅ Settings row created");
@@ -18,7 +19,7 @@ async function main() {
   // ---------- Admin account ----------
   const adminEmail = process.env.SEED_ADMIN_EMAIL || "admin@novawears.pk";
   const adminPassword = process.env.SEED_ADMIN_PASSWORD || "ChangeMe123!";
-  const existingAdmin = sqlite.prepare("SELECT id FROM admins WHERE email = ?").get(adminEmail);
+  const existingAdmin = (await db.select({ id: admins.id }).from(admins).where(eq(admins.email, adminEmail)))[0];
   if (!existingAdmin) {
     const passwordHash = await bcrypt.hash(adminPassword, 10);
     await db.insert(admins).values({
@@ -44,7 +45,9 @@ async function main() {
   const categoryIds: Record<string, string> = {};
   for (let i = 0; i < categoryDefs.length; i++) {
     const c = categoryDefs[i];
-    const existing = sqlite.prepare("SELECT id FROM categories WHERE slug = ?").get(c.slug) as { id: string } | undefined;
+    const existing = (
+      await db.select({ id: categories.id }).from(categories).where(eq(categories.slug, c.slug))
+    )[0];
     if (existing) {
       categoryIds[c.slug] = existing.id;
       continue;
@@ -147,7 +150,9 @@ async function main() {
   ];
 
   for (const p of demoProducts) {
-    const existing = sqlite.prepare("SELECT id FROM products WHERE slug = ?").get(p.slug);
+    const existing = (
+      await db.select({ id: products.id }).from(products).where(eq(products.slug, p.slug))
+    )[0];
     if (existing) continue;
     const { categorySlug, ...rest } = p;
     await db.insert(products).values({
