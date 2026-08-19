@@ -3,6 +3,8 @@ import { getSettings } from "@/lib/settings";
 import Reveal from "@/components/Reveal";
 import type { Metadata } from "next";
 
+export const dynamic = "force-dynamic";
+
 const POLICIES: Record<string, { title: string; body: (settings: { deliveryEstimate: string; businessEmail: string; storeName: string }) => string[] }> = {
   shipping: {
     title: "Shipping Policy",

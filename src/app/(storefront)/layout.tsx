@@ -5,6 +5,8 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import CartDrawer from "@/components/CartDrawer";
 
+export const dynamic = "force-dynamic";
+
 export default async function StorefrontLayout({ children }: { children: React.ReactNode }) {
   const settings = await getSettings();
 

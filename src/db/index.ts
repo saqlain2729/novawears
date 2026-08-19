@@ -23,6 +23,14 @@ import * as schema from "./schema";
  * for free at https://turso.tech — see README for exact steps.
  */
 
+function isBuildPhase(): boolean {
+  // Next.js CLI sets NEXT_PHASE to "phase-production-build" only while it's
+  // executing `next build`. At runtime inside a deployed serverless function
+  // the variable is not set, so this keeps build-time imports happy while
+  // still failing loudly at request time when credentials are missing.
+  return process.env.NEXT_PHASE === "phase-production-build";
+}
+
 function buildClient(): Client {
   const remoteUrl = process.env.DATABASE_URL;
 
@@ -34,6 +42,19 @@ function buildClient(): Client {
   }
 
   if (process.env.VERCEL) {
+    if (isBuildPhase()) {
+      // During `next build`, never crash because a runtime-only database
+      // credential isn't available. Use an in-memory, empty SQLite client so
+      // module imports and any pre-render default lookups succeed. At request
+      // time (below) the app still fails loudly if DATABASE_URL is missing.
+      console.warn(
+        "DATABASE_URL is not set during build — using an empty in-memory SQLite " +
+          "database. Set DATABASE_URL and DATABASE_AUTH_TOKEN as Vercel " +
+          "environment variables for production."
+      );
+      return createClient({ url: "file::memory:" });
+    }
+
     // Deployed to Vercel with no remote database configured. Fail loudly
     // and clearly instead of silently writing to an ephemeral /tmp file
     // that would lose all data on the next deploy or cold start.
